@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Python IDE</title>
+  <style>
+    body { font-family: sans-serif; margin: 0; padding: 0; background: #f5f5f5; }
+    header { background: #2c3e50; color: #fff; padding: 1em; }
+    #container { display: flex; flex-direction: column; height: 100vh; }
+    #editor { flex: 1; padding: 1em; }
+    #code { width: 100%; height: 300px; font-size: 16px; font-family: 'Fira Mono', monospace; }
+    #output { width: 100%; height: 200px; background: #222; color: #0f0; font-size: 15px; padding: 1em; overflow: auto; }
+    #run { padding: 0.5em 1em; font-size: 1em; background: #27ae60; color: #fff; border: none; margin-top: 1em; cursor: pointer; }
+    #run:disabled { background: #aaa; }
+    #package-bar { margin: 1em 0; }
+    #package-input { font-size: 1em; width: 200px; }
+    #install { padding: 0.5em 1em; font-size: 1em; background: #2980b9; color: #fff; border: none; cursor: pointer; }
+    #install:disabled { background: #aaa; }
+    footer { background: #2c3e50; color: #fff; text-align: center; padding: 0.5em 0; }
+    a { color: #00d8ff; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js"></script>
+</head>
+<body>
+  <header>
+    <h1>Web Thonny-like Python IDE</h1>
+  </header>
+  <div id="container">
+    <div id="editor">
+      <div id="package-bar">
+        <label for="package-input"><strong>Install package:</strong></label>
+        <input id="package-input" placeholder="e.g. numpy" />
+        <button id="install" disabled>Install</button>
+      </div>
+      <label for="code"><strong>Python Code:</strong></label>
+      <textarea id="code" spellcheck="false">print("Hello from your browser!")</textarea>
+      <br>
+      <button id="run">Run ▶</button>
+    </div>
+    <div>
+      <label><strong>Output:</strong></label>
+      <pre id="output"></pre>
+    </div>
+  </div>
+  <footer>
+    <p>Inspired by Thonny. Powered by <a href="https://pyodide.org/" target="_blank">Pyodide</a> &amp; <a href="https://pages.github.com/">GitHub Pages</a>.</p>
+  </footer>
+  <script>
+    let pyodideReady = false;
+    let pyodide = null;
+    const output = document.getElementById('output');
+    const runBtn = document.getElementById('run');
+    const installBtn = document.getElementById('install');
+    const packageInput = document.getElementById('package-input');
+
+    async function main() {
+      output.textContent = "Loading Python (Pyodide)...";
+      pyodide = await loadPyodide();
+      // Load micropip for package installation
+      await pyodide.loadPackage("micropip");
+      pyodideReady = true;
+      output.textContent = "Python ready. Write code and click Run!";
+      runBtn.disabled = false;
+      installBtn.disabled = false;
+    }
+
+    main();
+
+    runBtn.disabled = true;
+    installBtn.disabled = true;
+
+    runBtn.onclick = async function() {
+      if (!pyodideReady) return;
+      output.textContent = "";
+      const code = document.getElementById('code').value;
+      try {
+        await pyodide.runPythonAsync(`
+import sys
+import io
+sys.stdout = io.StringIO()
+sys.stderr = io.StringIO()
+${code}
+stdout = sys.stdout.getvalue()
+stderr = sys.stderr.getvalue()
+        `);
+        const stdout = pyodide.globals.get('stdout');
+        const stderr = pyodide.globals.get('stderr');
+        output.textContent = stdout + (stderr ? "\n" + stderr : "");
+      } catch (err) {
+        output.textContent = err;
+      }
+    };
+
+    installBtn.onclick = async function() {
+      if (!pyodideReady) return;
+      const pkg = packageInput.value.trim();
+      if (!pkg) return;
+      output.textContent = `Installing package "${pkg}"...`;
+      installBtn.disabled = true;
+      try {
+        await pyodide.runPythonAsync(`
+import micropip
+await micropip.install("${pkg}")
+        `);
+        output.textContent = `Successfully installed "${pkg}".`;
+      } catch (e) {
+        output.textContent = `Failed to install "${pkg}":\n` + e;
+      }
+      installBtn.disabled = false;
+    };
+
+    packageInput.addEventListener("keyup", function(event) {
+      if (event.key === "Enter") {
+        installBtn.click();
+      }
+    });
+  </script>
+</body>
+</html>
